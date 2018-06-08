@@ -25,9 +25,14 @@ class MultiViewController: UIViewController, UITextFieldDelegate {
     // Strong references
     var mvcObserver: NSObjectProtocol?
     var presenter: ViewPresenter?
-    var viewModel: ViewModel?
+
     var minimalObserver: NSObjectProtocol?
-    
+    var minimalViewModel: MinimalViewModel?
+
+    var viewModel: ViewModel?
+    var mvvmObserver: Cancellable?
+
+
 	override func viewDidLoad() {
 		super.viewDidLoad()
 		
@@ -108,7 +113,7 @@ extension MultiViewController: ViewProtocol {
 
 // Minimal MVVM ---------------------------------------------------------
 
-class ViewModel: NSObject {
+class MinimalViewModel: NSObject {
     let model: Model
     var observer: NSObjectProtocol?
 
@@ -130,25 +135,50 @@ class ViewModel: NSObject {
 
 extension MultiViewController {
 	func mvvmMinimalDidLoad() {
-        viewModel = ViewModel(model: model)
-        minimalObserver = viewModel?.observe(\.textFieldValue, options: [.initial, .new]) { [weak self] (_, change) in
+        minimalViewModel = MinimalViewModel(model: model)
+        minimalObserver = minimalViewModel?.observe(\.textFieldValue, options: [.initial, .new]) { [weak self] (_, change) in
             self?.mvvmmTextField?.text = change.newValue
         }
 	}
 	
 	@IBAction func mvvmmButtonPressed() {
-        viewModel?.commit(value: mvvmmTextField?.text ?? "")
+        minimalViewModel?.commit(value: mvvmmTextField?.text ?? "")
 	}
 }
 
 
 // MVVM ---------------------------------------------------------
 
+class ViewModel {
+    let model: Model
+
+    init(model: Model) {
+        self.model = model
+    }
+
+    var textFieldValue: Signal<String> {
+        return Signal.notifications(name: Model.textDidChange)
+            .compactMap { note in
+                note.userInfo?[Model.textKey] as? String
+            }.continuous(initialValue: model.value)
+    }
+
+    func commit(value: String) {
+        model.value = value
+    }
+}
+
 extension MultiViewController {
 	func mvvmDidLoad() {
+        viewModel = ViewModel(model: model)
+        mvvmObserver = viewModel?.textFieldValue.subscribeValues({ [unowned self] (text) in
+            self.mvvmTextField?.text = text
+        })
+
 	}
     
 	@IBAction func mvvmButtonPressed() {
+        viewModel?.commit(value: mvvmTextField.text ?? "")
 	}
 }
 
