@@ -22,29 +22,11 @@ class MultiViewController: UIViewController, UITextFieldDelegate {
 	
 	@IBOutlet var stackView: UIStackView!
 
+    // Strong references
     var mvcObserver: NSObjectProtocol?
     var presenter: ViewPresenter?
-	
-    // Strong references
-//    var mvcObserver: NSObjectProtocol?
-//    var presenter: ViewPresenter?
-//
-//    var minimalViewModel: MinimalViewModel?
-//    var minimalObserver: NSObjectProtocol?
-//
-//    var viewModel: ViewModel?
-//    var mvvmObserver: Cancellable?
-//
-//    var viewState: ViewState?
-//    var viewStateModelObserver: NSObjectProtocol?
-//    var viewStateObserver: NSObjectProtocol?
-//
-//    var driver: Driver<TEAState, TEAState.Action>?
-//
-//    var viewStateAdapter: Var<String>!
-//
-//    var cleanPresenter: CleanPresenter!
-
+    var viewModel: ViewModel?
+    var minimalObserver: NSObjectProtocol?
     
 	override func viewDidLoad() {
 		super.viewDidLoad()
@@ -126,11 +108,36 @@ extension MultiViewController: ViewProtocol {
 
 // Minimal MVVM ---------------------------------------------------------
 
+class ViewModel: NSObject {
+    let model: Model
+    var observer: NSObjectProtocol?
+
+    @objc dynamic var textFieldValue: String
+
+    init(model: Model) {
+        self.model = model
+        textFieldValue = model.value
+        super.init()
+        observer = NotificationCenter.default.addObserver(forName: Model.textDidChange, object: nil, queue: nil) { [weak self] (note) in
+            self?.textFieldValue = note.userInfo?[Model.textKey] as? String ?? ""
+        }
+    }
+
+    func commit(value: String) {
+        model.value = value
+    }
+}
+
 extension MultiViewController {
 	func mvvmMinimalDidLoad() {
+        viewModel = ViewModel(model: model)
+        minimalObserver = viewModel?.observe(\.textFieldValue, options: [.initial, .new]) { [weak self] (_, change) in
+            self?.mvvmmTextField?.text = change.newValue
+        }
 	}
 	
 	@IBAction func mvvmmButtonPressed() {
+        viewModel?.commit(value: mvvmmTextField?.text ?? "")
 	}
 }
 
