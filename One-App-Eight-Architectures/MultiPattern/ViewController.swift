@@ -21,6 +21,9 @@ class MultiViewController: UIViewController, UITextFieldDelegate {
 	@IBOutlet var cleanButton: UIButton!
 	
 	@IBOutlet var stackView: UIStackView!
+
+    var mvcObserver: NSObjectProtocol?
+    var presenter: ViewPresenter?
 	
     // Strong references
 //    var mvcObserver: NSObjectProtocol?
@@ -62,20 +65,61 @@ class MultiViewController: UIViewController, UITextFieldDelegate {
 
 extension MultiViewController {
 	func mvcDidLoad() {
+        mvcTextField.text = model.value
+        mvcObserver = NotificationCenter.default.addObserver(forName: Model.textDidChange, object: nil, queue: nil) { [mvcTextField] (note) in
+            mvcTextField?.text = note.userInfo?[Model.textKey] as? String
+        }
 	}
 	
 	@IBAction func mvcButtonPressed() {
+        model.value = mvcTextField?.text ?? ""
 	}
 }
 
 
 // MVP ---------------------------------------------------------
 
-extension MultiViewController {
+protocol ViewProtocol: class {
+    var textFieldValue: String { get set }
+}
+
+class ViewPresenter {
+    let model: Model
+    weak var view: ViewProtocol?
+    let observer: NSObjectProtocol
+
+    init(model: Model, view: ViewProtocol) {
+        self.model = model
+        self.view = view
+
+        view.textFieldValue = model.value
+        observer = NotificationCenter.default.addObserver(forName: Model.textDidChange, object: nil, queue: nil) { [view] (note) in
+            view.textFieldValue = note.userInfo?[Model.textKey] as? String ?? ""
+        }
+    }
+
+    func commit() {
+        model.value = view?.textFieldValue ?? ""
+    }
+}
+
+extension MultiViewController: ViewProtocol {
 	func mvpDidLoad() {
+        presenter = ViewPresenter(model: model, view: self)
 	}
+
+    var textFieldValue: String {
+        get {
+            return mvpTextField?.text ?? ""
+        }
+
+        set {
+            mvpTextField?.text = newValue
+        }
+    }
 	
 	@IBAction func mvpButtonPressed() {
+        presenter?.commit()
 	}
 }
 
@@ -136,6 +180,5 @@ extension MultiViewController {
 	}
 
 	@IBAction func cleanButtonPressed() {
-		cleanPresenter.commit()
 	}
 }
