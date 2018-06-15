@@ -40,6 +40,7 @@ class MultiViewController: UIViewController, UITextFieldDelegate {
 
     var viewStateAdapter: Var<String>?
 
+    var cleanPresenter: CleanPresenter?
 
 	override func viewDidLoad() {
 		super.viewDidLoad()
@@ -299,10 +300,79 @@ extension MultiViewController {
 
 // "Clean" ---------------------------------------------------------
 
-extension MultiViewController {
+class CleanUseCase {
+    let model: Model
+    var modelValue: String {
+        get {
+            return model.value
+        }
+        set {
+            model.value = newValue
+        }
+    }
+    weak var presenter: CleanPresenterProtocol?
+    var observer: NSObjectProtocol?
+
+    init(model: Model) {
+        self.model = model
+        observer = NotificationCenter.default.addObserver(forName: Model.textDidChange, object: nil, queue: nil) { [weak self] (note) in
+            self?.presenter?.textFieldValue = note.userInfo?[Model.textKey] as? String ?? ""
+        }
+    }
+}
+
+protocol CleanPresenterProtocol: class {
+    var textFieldValue: String { get set }
+}
+
+protocol CleanViewProtocol: class {
+    var cleanTextFieldValue: String { get set }
+}
+
+class CleanPresenter: CleanPresenterProtocol {
+    let useCase: CleanUseCase
+    weak var view: CleanViewProtocol? {
+        didSet {
+            if let v = view {
+                v.cleanTextFieldValue = textFieldValue
+            }
+        }
+    }
+
+    init(useCase: CleanUseCase) {
+        self.useCase = useCase
+        self.textFieldValue = useCase.modelValue
+        useCase.presenter = self
+    }
+
+    var textFieldValue: String {
+        didSet {
+            view?.cleanTextFieldValue = textFieldValue
+        }
+    }
+
+    func commit() {
+        useCase.modelValue = view?.cleanTextFieldValue ?? ""
+    }
+}
+extension MultiViewController: CleanViewProtocol {
+
+    var cleanTextFieldValue: String {
+        get {
+            return cleanTextField.text ?? ""
+        }
+        set {
+            cleanTextField.text = newValue
+        }
+    }
+
 	func cleanDidLoad() {
+        let useCase = CleanUseCase(model: model)
+        cleanPresenter = CleanPresenter(useCase: useCase)
+        cleanPresenter?.view = self
 	}
 
 	@IBAction func cleanButtonPressed() {
+        cleanPresenter?.commit()
 	}
 }
