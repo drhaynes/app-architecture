@@ -32,6 +32,14 @@ class MultiViewController: UIViewController, UITextFieldDelegate {
     var viewModel: ViewModel?
     var mvvmObserver: Cancellable?
 
+    var viewState: ViewState?
+    var viewStateObserver: NSObjectProtocol?
+    var viewStateModelObserver: NSObjectProtocol?
+
+    var driver: Driver<ElmState, ElmState.Action>?
+
+    var viewStateAdapter: Var<String>?
+
     var cleanPresenter: CleanPresenter?
 
 	override func viewDidLoad() {
@@ -54,7 +62,8 @@ class MultiViewController: UIViewController, UITextFieldDelegate {
 extension MultiViewController {
 	func mvcDidLoad() {
         mvcTextField.text = model.value
-        mvcObserver = NotificationCenter.default.addObserver(forName: Model.textDidChange, object: nil, queue: nil) { [mvcTextField] (note) in
+        mvcObserver = NotificationCenter.default.addObserver(forName: Model.textDidChange, object: nil, queue: nil)
+        { [mvcTextField] (note) in
             mvcTextField?.text = note.userInfo?[Model.textKey] as? String
         }
 	}
@@ -186,19 +195,82 @@ extension MultiViewController {
 
 // MVC+VS ---------------------------------------------------------
 
+class ViewState {
+    var textFieldValue: String = ""
+
+    init(textFieldValue: String) {
+        self.textFieldValue = textFieldValue
+    }
+}
+
 extension MultiViewController {
 	func mvcvsDidLoad() {
+        viewState = ViewState(textFieldValue: model.value)
+        mvcvsTextField.text = model.value
+        viewStateObserver = NotificationCenter.default.addObserver(forName: .UITextFieldTextDidChange,
+                                                                   object: mvcvsTextField,
+                                                                   queue: nil,
+                                                                   using: { [viewState] note in
+                                                                    viewState?.textFieldValue = (note.object as! UITextField).text ?? ""
+        })
+        viewStateModelObserver = NotificationCenter.default.addObserver(forName: Model.textDidChange, object: nil, queue: nil, using: { [mvcvsTextField] (note) in
+            mvcvsTextField?.text = note.userInfo?[Model.textKey] as? String ?? ""
+        })
 	}
 	
 	@IBAction func mvcvsButtonPressed() {
+        model.value = viewState?.textFieldValue ?? ""
 	}
 }
 
 
 // TEA ---------------------------------------------------------
 
+struct ElmState {
+    var text: String
+
+    enum Action {
+        case commit
+        case setText(String)
+        case modelNotification(Notification)
+    }
+
+    mutating func update(_ action: Action) -> Command<Action>? {
+        switch action {
+        case .commit:
+            return Command.changeModelText(text)
+
+        case .setText(let text):
+            self.text = text
+            return nil
+
+        case .modelNotification(let note):
+            text = note.userInfo?[Model.textKey] as? String ?? ""
+            return nil
+        }
+    }
+
+    var view: [ElmView<Action>] {
+        return [
+            ElmView.textField(text, onChange: Action.setText),
+            ElmView.button(title: "Commit", onTap: Action.commit)
+        ]
+    }
+
+    var subscriptions: [Subscription<Action>] {
+        return [
+            .notification(name: Model.textDidChange, Action.modelNotification)
+        ]
+    }
+}
+
 extension MultiViewController {
 	func teaDidLoad() {
+        driver = Driver.init(ElmState(text: model.value), update: { state, action in
+            state.update(action)
+        }, view: { $0.view
+        }, subscriptions: { $0.subscriptions
+        }, rootView: stackView, model: model)
 	}
 }
 
@@ -206,7 +278,22 @@ extension MultiViewController {
 // MAVB ---------------------------------------------------------
 
 extension MultiViewController {
+
 	func mavbDidLoad() {
+        viewStateAdapter = Var(model.value)
+
+//        TextField(
+//            .text <-- Signal.notifications(name: Model.textDidChange)
+//            .compactMap { note in note.userInfo?[Model.textKey] as? String }
+//            .startWith(model.value),
+//            .didChange --> Input.map { $0.text }.bind(to: viewStateAdapter)
+//        ).applyBindings(to: mavbTextField)
+//
+//        Button(
+//            .action(.primaryActionTriggered) --> Input()
+//            .trigger(viewStateAdapter)
+//            .subscribeValuesUntilEnd { [model] value in model.value = value }
+//        ).applyBindings(to: mavbButton)
 	}
 }
 
